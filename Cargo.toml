@@ -1,0 +1,8 @@
+
+
+[workspace]
+members = [
+    "pd_gui",
+]
+resolver = "2"
+
