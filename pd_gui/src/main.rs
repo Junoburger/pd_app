@@ -4,10 +4,11 @@ use artist::{get_artists, Artist};
 use composition::Composition;
 
 use iced::{
-    alignment, button, keyboard, pane_grid, scrollable, window, Application, Button, Color, Column,
-    Command, Container, Element, Length, PaneGrid, Row, Scrollable, Settings, Subscription, Text,
+    alignment, button, keyboard, pane_grid, scrollable, window, Application,
+    Button, Color, Column, Command, Container, Element, Length, PaneGrid, Row,
+    Scrollable, Settings, Subscription, Text,
 };
-use iced_native::{event, subscription, Event};
+use iced_native::{event, subscription, widget::column, Event};
 
 fn main() -> iced::Result {
     PsycheDaily::run(Settings {
@@ -69,9 +70,15 @@ impl iced::Application for PsycheDaily {
     }
     fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::CreateCompositionPressed => println!("Pressed"),
+            Message::CreateCompositionPressed => {
+                self.is_composition_mode = true
+            }
             Message::Split(axis, pane) => {
-                let result = self.panes.split(axis, &pane, Pane::new(self.panes_created));
+                let result = self.panes.split(
+                    axis,
+                    &pane,
+                    Pane::new(self.panes_created),
+                );
 
                 if let Some((pane, _)) = result {
                     self.focus = Some(pane);
@@ -81,7 +88,11 @@ impl iced::Application for PsycheDaily {
             }
             Message::SplitFocused(axis) => {
                 if let Some(pane) = self.focus {
-                    let result = self.panes.split(axis, &pane, Pane::new(self.panes_created));
+                    let result = self.panes.split(
+                        axis,
+                        &pane,
+                        Pane::new(self.panes_created),
+                    );
 
                     if let Some((pane, _)) = result {
                         self.focus = Some(pane);
@@ -92,24 +103,29 @@ impl iced::Application for PsycheDaily {
             }
             Message::FocusAdjacent(direction) => {
                 if let Some(pane) = self.focus {
-                    if let Some(adjacent) = self.panes.adjacent(&pane, direction) {
+                    if let Some(adjacent) =
+                        self.panes.adjacent(&pane, direction)
+                    {
                         self.focus = Some(adjacent);
                     }
                 }
             }
             Message::Clicked(pane) => {
-                println!("CLICKED");
                 self.focus = Some(pane);
             }
             Message::Resized(pane_grid::ResizeEvent { split, ratio }) => {
                 self.panes.resize(&split, ratio);
             }
-            Message::Dragged(pane_grid::DragEvent::Dropped { pane, target }) => {
+            Message::Dragged(pane_grid::DragEvent::Dropped {
+                pane,
+                target,
+            }) => {
                 self.panes.swap(&pane, &target);
             }
             Message::Dragged(_) => {}
             Message::TogglePin(pane) => {
-                if let Some(Pane { is_pinned, .. }) = self.panes.get_mut(&pane) {
+                if let Some(Pane { is_pinned, .. }) = self.panes.get_mut(&pane)
+                {
                     *is_pinned = !*is_pinned;
                 }
             }
@@ -120,9 +136,11 @@ impl iced::Application for PsycheDaily {
             }
             Message::CloseFocused => {
                 if let Some(pane) = self.focus {
-                    if let Some(Pane { is_pinned, .. }) = self.panes.get(&pane) {
+                    if let Some(Pane { is_pinned, .. }) = self.panes.get(&pane)
+                    {
                         if !is_pinned {
-                            if let Some((_, sibling)) = self.panes.close(&pane) {
+                            if let Some((_, sibling)) = self.panes.close(&pane)
+                            {
                                 self.focus = Some(sibling);
                             }
                         }
@@ -158,10 +176,11 @@ impl iced::Application for PsycheDaily {
             let is_focused = focus == Some(id);
 
             let text = if pane.is_pinned { "Unpin" } else { "Pin" };
-            let pin_button = Button::new(&mut pane.pin_button, Text::new(text).size(14))
-                .on_press(Message::TogglePin(id))
-                .style(style::Button::Pin)
-                .padding(3);
+            let pin_button =
+                Button::new(&mut pane.pin_button, Text::new(text).size(14))
+                    .on_press(Message::TogglePin(id))
+                    .style(style::Button::Pin)
+                    .padding(3);
 
             let title = Row::with_children(vec![
                 pin_button.into(),
@@ -181,21 +200,37 @@ impl iced::Application for PsycheDaily {
                 .padding(1)
                 .style(style::TitleBar { is_focused });
 
-            pane_grid::Content::new(pane.content.view(id, total_panes, pane.is_pinned))
-                .title_bar(title_bar)
-                .style(style::Pane { is_focused })
+            pane_grid::Content::new(pane.content.view(
+                id,
+                total_panes,
+                pane.is_pinned,
+            ))
+            .title_bar(title_bar)
+            .style(style::Pane { is_focused })
         })
         // .width(Length::Fill)
-        // .height(Length::Fill)
-        .spacing(1)
+        .height(Length::Fill)
+        .spacing(10)
         .on_click(Message::Clicked)
         .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
-        Container::new(pane_grid)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .padding(1)
+        let mut wrapper: Row<Message> = Row::new().height(Length::Fill).push(
+            Button::new(
+                &mut self.create_composition_button,
+                Text::new("Composition +"),
+            )
+            .on_press(Message::CreateCompositionPressed),
+        );
+        // .push(iced::widget::Space::with_height(Length::Fill))
+        if self.is_composition_mode == true {
+            wrapper = wrapper.push(pane_grid);
+        }
+
+        Container::new(wrapper)
+            // .width(Length::Fill)
+            // .height(Length::Fill)
+            .padding(10)
             .into()
     }
 }
@@ -231,6 +266,7 @@ fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
     }
 }
 
+#[derive(Debug)]
 struct Pane {
     pub is_pinned: bool,
     pub pin_button: button::State,
@@ -238,6 +274,7 @@ struct Pane {
     pub controls: Controls,
 }
 
+#[derive(Debug)]
 struct Content {
     id: usize,
     scroll: scrollable::State,
@@ -246,6 +283,7 @@ struct Content {
     close: button::State,
 }
 
+#[derive(Debug)]
 struct Controls {
     close: button::State,
 }
@@ -310,7 +348,7 @@ impl Content {
             ))
             .push(button(
                 split_vertically,
-                "Split vertically",
+                "Composition +",
                 Message::Split(pane_grid::Axis::Vertical, pane),
                 style::Button::Primary,
             ));
@@ -327,14 +365,14 @@ impl Content {
         let content = Scrollable::new(scroll)
             .width(Length::Fill)
             .spacing(10)
-            .align_items(iced::Alignment::Center)
+            .align_items(iced::Alignment::Start)
             .push(controls);
 
         Container::new(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .padding(5)
-            .center_y()
+            // .center_y()
             .into()
     }
 }
@@ -352,9 +390,10 @@ impl Controls {
         total_panes: usize,
         is_pinned: bool,
     ) -> Element<Message> {
-        let mut button = Button::new(&mut self.close, Text::new("Close").size(14))
-            .style(style::Button::Control)
-            .padding(3);
+        let mut button =
+            Button::new(&mut self.close, Text::new("Close").size(14))
+                .style(style::Button::Control)
+                .padding(3);
         if total_panes > 1 && !is_pinned {
             button = button.on_press(Message::Close(pane));
         }
@@ -437,7 +476,9 @@ mod style {
         fn active(&self) -> button::Style {
             let (background, text_color) = match self {
                 Button::Primary => (Some(ACTIVE), Color::WHITE),
-                Button::Destructive => (None, Color::from_rgb8(0xFF, 0x47, 0x47)),
+                Button::Destructive => {
+                    (None, Color::from_rgb8(0xFF, 0x47, 0x47))
+                }
                 Button::Control => (Some(PANE_ID_COLOR_FOCUSED), Color::WHITE),
                 Button::Pin => (Some(ACTIVE), Color::WHITE),
             };
