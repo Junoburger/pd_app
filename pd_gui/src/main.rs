@@ -1,23 +1,51 @@
 mod artist;
+pub mod audio;
 mod composition;
+mod synth;
 use artist::{get_artists, Artist};
+use audio::output_test_runner;
 use composition::Composition;
+use synth::synth;
 
 use iced::{
-    alignment, button, keyboard, pane_grid, scrollable, window, Application,
-    Button, Color, Column, Command, Container, Element, Length, PaneGrid, Row,
-    Scrollable, Settings, Subscription, Text,
+    alignment, button, keyboard, pane_grid, scrollable, window, Alignment,
+    Application, Button, Color, Column, Command, Container, Element, Length,
+    PaneGrid, Row, Scrollable, Settings, Space, Subscription, Text,
 };
-use iced_native::{event, subscription, widget::column, Event};
+use iced_aw::{graphics::icons::icon_to_char, Icon, ICON_FONT};
+use iced_native::{event, subscription, Event};
+
+use iced_audio::{
+    h_slider, knob, tick_marks, v_slider, xy_pad, FloatRange, FreqRange,
+    HSlider, IntRange, Knob, LogDBRange, Normal, VSlider, XYPad,
+};
+
+// Test drawing a audio i/o meter with level control -- START
+//
+
+// Test drawing a audio i/o meter with level control -- END
+// static ICON: &[u8] = include_bytes!("../resources/sqr.png");
+// const ICON_HEIGHT: u32 = 250;
+// const ICON_WIDTH: u32 = 250;
 
 fn main() -> iced::Result {
-    PsycheDaily::run(Settings {
+    // let image = image::load_from_memory(ICON).unwrap();
+    // let icon = iced::window::Icon::from_rgba(
+    //     image.as_bytes().to_vec(),
+    //     ICON_HEIGHT,
+    //     ICON_WIDTH,
+    // );
+
+    let settings = Settings {
         window: window::Settings {
+            // icon: Some(icon.unwrap()),
             min_size: Some((400, 200)),
             ..window::Settings::default()
         },
         ..Settings::default()
-    })
+    };
+
+    PsycheDaily::run(settings)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -32,6 +60,14 @@ enum Message {
     TogglePin(pane_grid::Pane),
     Close(pane_grid::Pane),
     CloseFocused,
+    // AUDIO UI
+    HSliderInt(Normal),
+    VSliderDB(Normal),
+    KnobFreq(Normal),
+    XYPadFloat(Normal, Normal),
+
+    // AUDIO BACKEND
+    OpenAudioDefaultChannel,
 }
 
 struct PsycheDaily {
@@ -42,6 +78,37 @@ struct PsycheDaily {
     panes: pane_grid::State<Pane>,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
+    // The ranges handle converting the input/output of a parameter to and from
+    // a usable value.
+    //
+    // There are 4 built-in options available for a range:
+    //
+    // * FloatRange - a linear range of f32 values
+    // * IntRange - a discrete range of i32 values. This will cause the widget
+    // to "step" when moved.
+    // * LogDBRange - a logarithmic range of decibel values. Values around 0 dB
+    // will increment slower than values farther away from 0 dB.
+    // * FreqRange - a logarithmic range of frequency values. Each octave in
+    // the 10 octave spectrum (from 20 Hz to 20480 Hz) is spaced evenly.
+    //
+    float_range: FloatRange,
+    int_range: IntRange,
+    db_range: LogDBRange,
+    freq_range: FreqRange,
+
+    // The states of the widgets that will control the parameters.
+    h_slider_state: h_slider::State,
+    v_slider_state: v_slider::State,
+    knob_state: knob::State,
+    xy_pad_state: xy_pad::State,
+
+    // A group of tick marks with their size and position.
+    center_tick_mark: tick_marks::Group,
+
+    output_text: String,
+
+    // Open a audio I/O stream for a default channel
+    open_audio_io: button::State,
 }
 
 impl iced::Application for PsycheDaily {
@@ -50,6 +117,12 @@ impl iced::Application for PsycheDaily {
     type Flags = ();
 
     fn new(_flags: ()) -> (Self, Command<Message>) {
+        // Initalize each range:
+        let float_range = FloatRange::default_bipolar();
+        let int_range = IntRange::new(0, 10);
+        let db_range = LogDBRange::new(-12.0, 12.0, 0.5.into());
+        let freq_range = FreqRange::default();
+
         let (panes, _) = pane_grid::State::new(Pane::new(0));
         (
             Self {
@@ -60,6 +133,36 @@ impl iced::Application for PsycheDaily {
                 panes,
                 panes_created: 1,
                 focus: None,
+                // AUDIO UI
+                // Add the ranges.
+                float_range,
+                int_range,
+                db_range,
+                freq_range,
+
+                // Initialize the state of the widgets with a normalized parameter
+                // that has a value and a default value.
+                h_slider_state: h_slider::State::new(
+                    int_range.normal_param(5, 5),
+                ),
+                v_slider_state: v_slider::State::new(
+                    db_range.default_normal_param(),
+                ),
+                knob_state: knob::State::new(
+                    freq_range.normal_param(1000.0, 1000.0),
+                ),
+                xy_pad_state: xy_pad::State::new(
+                    float_range.default_normal_param(),
+                    float_range.default_normal_param(),
+                ),
+
+                // Add a tick mark at the center position with the tier 2 size
+                center_tick_mark: tick_marks::Group::center(
+                    tick_marks::Tier::Two,
+                ),
+
+                output_text: "Move a widget!".into(),
+                open_audio_io: button::State::new(),
             },
             Command::none(),
         )
@@ -147,6 +250,36 @@ impl iced::Application for PsycheDaily {
                     }
                 }
             }
+            // AUDIO UI
+            // Retrieve the value by mapping the normalized value of the parameter
+            // to the corresponding range.
+            //
+            // Now do something useful with that value!
+            Message::HSliderInt(normal) => {
+                // Integer parameters must be snapped to make the widget "step" when moved.
+                self.h_slider_state.snap_visible_to(&self.int_range);
+
+                let value = self.int_range.unmap_to_value(normal);
+                self.output_text = format!("HSliderInt: {}", value);
+            }
+            Message::VSliderDB(normal) => {
+                let value = self.db_range.unmap_to_value(normal);
+                self.output_text = format!("VSliderDB: {:.3}", value);
+            }
+            Message::KnobFreq(normal) => {
+                let value = self.freq_range.unmap_to_value(normal);
+                self.output_text = format!("KnobFreq: {:.2}", value);
+            }
+            Message::XYPadFloat(normal_x, normal_y) => {
+                let value_x = self.float_range.unmap_to_value(normal_x);
+                let value_y = self.float_range.unmap_to_value(normal_y);
+                self.output_text =
+                    format!("XYPadFloat: x: {:.2}, y: {:.2}", value_x, value_y);
+            }
+            Message::OpenAudioDefaultChannel => {
+                output_test_runner();
+                // synth();
+            }
         }
 
         Command::none()
@@ -169,68 +302,128 @@ impl iced::Application for PsycheDaily {
     }
 
     fn view(&mut self) -> Element<Message> {
+        // Create each parameter widget, passing in the current state of the widget.
+        // let h_slider_widget =
+        //     HSlider::new(&mut self.h_slider_state, Message::HSliderInt)
+        //         // Add the tick mark group to this widget.
+        //         .tick_marks(&self.center_tick_mark);
+
+        // let v_slider_widget =
+        //     VSlider::new(&mut self.v_slider_state, Message::VSliderDB)
+        //         .tick_marks(&self.center_tick_mark);
+
+        // let knob_widget = Knob::new(
+        //     &mut self.knob_state,
+        //     Message::KnobFreq,
+        //     || None,
+        //     || None,
+        // );
+
+        // let xy_pad_widget =
+        //     XYPad::new(&mut self.xy_pad_state, Message::XYPadFloat);
+
+        // //
+        let content: Element<_> = Column::new()
+            .max_width(300)
+            .max_height(500)
+            .spacing(20)
+            .padding(20)
+            .align_items(Alignment::Center)
+            // .push(h_slider_widget)
+            // .push(v_slider_widget)
+            // .push(knob_widget)
+            // .push(xy_pad_widget)
+            .push(
+                Container::new(Text::new(&self.output_text))
+                    .width(Length::Fill),
+            )
+            .into();
+
         let focus = self.focus;
         let total_panes = self.panes.len();
 
         let pane_grid = PaneGrid::new(&mut self.panes, |id, pane| {
-            let is_focused = focus == Some(id);
+            // let is_focused = focus == Some(id);
 
-            let text = if pane.is_pinned { "Unpin" } else { "Pin" };
-            let pin_button =
-                Button::new(&mut pane.pin_button, Text::new(text).size(14))
-                    .on_press(Message::TogglePin(id))
-                    .style(style::Button::Pin)
-                    .padding(3);
+            // let text = if pane.is_pinned { "Unpin" } else { "Pin" };
+            // let pin_button =
+            //     Button::new(&mut pane.pin_button, Text::new(text).size(14))
+            //         .on_press(Message::TogglePin(id))
+            //         .style(style::Button::Pin)
+            //         .padding(3);
+            // let title = Row::with_children(vec![
+            //     // pin_button.into(),
+            //     // Text::new("Pane").into(), <<-- should probably showcontent title [e.g composition-name]
+            //     Text::new(pane.content.id.to_string())
+            //         .color(if is_focused {
+            //             PANE_ID_COLOR_FOCUSED
+            //         } else {
+            //             PANE_ID_COLOR_UNFOCUSED
+            //         })
+            //         .into(),
+            // ])
+            // .spacing(5)
 
-            let title = Row::with_children(vec![
-                pin_button.into(),
-                Text::new("Pane").into(),
-                Text::new(pane.content.id.to_string())
-                    .color(if is_focused {
-                        PANE_ID_COLOR_FOCUSED
-                    } else {
-                        PANE_ID_COLOR_UNFOCUSED
-                    })
-                    .into(),
-            ])
-            .spacing(5);
-
-            let title_bar = pane_grid::TitleBar::new(title)
-                .controls(pane.controls.view(id, total_panes, pane.is_pinned))
-                .padding(1)
-                .style(style::TitleBar { is_focused });
+            // let title_bar = pane_grid::TitleBar::new(title)
+            //     .controls(pane.controls.view(id, total_panes, pane.is_pinned))
+            //     .padding(1)
+            //     .style(style::TitleBar { is_focused });
 
             pane_grid::Content::new(pane.content.view(
                 id,
                 total_panes,
                 pane.is_pinned,
             ))
-            .title_bar(title_bar)
-            .style(style::Pane { is_focused })
+            // .title_bar(title_bar) // <<-- // TODO: Title bar should probably be something like tabs with project-name
+            // .style(style::Pane { is_focused })
         })
-        // .width(Length::Fill)
+        .width(Length::Fill)
         .height(Length::Fill)
         .spacing(10)
         .on_click(Message::Clicked)
         .on_drag(Message::Dragged)
         .on_resize(10, Message::Resized);
 
-        let mut wrapper: Row<Message> = Row::new().height(Length::Fill).push(
-            Button::new(
-                &mut self.create_composition_button,
-                Text::new("Composition +"),
+        let mut wrapper = Row::new().height(Length::Fill).width(Length::Fill);
+
+        let column_1: Column<Message> = Column::new()
+            .height(Length::Fill)
+            .padding(10)
+            // .push(Space::new(Length::Units(50), Length::Units(0)))
+            .push(
+                Button::new(
+                    &mut self.create_composition_button,
+                    Text::new(format!(
+                        "Composition {}",
+                        icon_to_char(Icon::ClipboardPlus),
+                    ))
+                    .font(ICON_FONT),
+                )
+                .on_press(Message::CreateCompositionPressed)
+                .style(style::Button::Primary),
             )
-            .on_press(Message::CreateCompositionPressed),
-        );
+            .push(Space::new(Length::Units(0), Length::Units(10)))
+            .push(
+                Button::new(
+                    &mut self.open_audio_io,
+                    Text::new("Open audio channel"),
+                )
+                .on_press(Message::OpenAudioDefaultChannel)
+                .style(style::Button::Pin),
+            );
+
+        let mut column_2: Column<Message> = Column::new().height(Length::Fill);
         // .push(iced::widget::Space::with_height(Length::Fill))
         if self.is_composition_mode == true {
-            wrapper = wrapper.push(pane_grid);
+            column_2 = column_2.push(content);
         }
 
+        wrapper = wrapper.push(column_1).push(column_2);
+
         Container::new(wrapper)
-            // .width(Length::Fill)
-            // .height(Length::Fill)
-            .padding(10)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .padding(0)
             .into()
     }
 }
@@ -337,21 +530,25 @@ impl Content {
             .style(style)
         };
 
+        // let slider =
+        //     iced_audio::Knob::new(&mut self.audio_knob, test(), test(), test());
+
         let mut controls = Column::new()
             .spacing(5)
             .max_width(150)
-            .push(button(
-                split_horizontally,
-                "Split horizontally",
-                Message::Split(pane_grid::Axis::Horizontal, pane),
-                style::Button::Primary,
-            ))
-            .push(button(
-                split_vertically,
-                "Composition +",
-                Message::Split(pane_grid::Axis::Vertical, pane),
-                style::Button::Primary,
-            ));
+            // .push(button(
+            //     split_horizontally,
+            //     "Split horizontally",
+            //     Message::Split(pane_grid::Axis::Horizontal, pane),
+            //     style::Button::Primary,
+            // ))
+            // .push(button(
+            //     split_vertically,
+            //     "Composition +",
+            //     Message::Split(pane_grid::Axis::Vertical, pane),
+            //     style::Button::Primary,
+            // ))
+            ;
 
         if total_panes > 1 && !is_pinned {
             controls = controls.push(button(
@@ -367,6 +564,8 @@ impl Content {
             .spacing(10)
             .align_items(iced::Alignment::Start)
             .push(controls);
+
+        // TODO: draw a rectangle for the base of displaying an audio signal [!wave_form]
 
         Container::new(content)
             .width(Length::Fill)
@@ -436,9 +635,9 @@ mod style {
 
             container::Style {
                 text_color: if self.is_focused {
-                    Some(Color::from_rgba(0.9, 0.5, 0.5, 0.5))
+                    Some(Color::from_rgba(0., 0., 0., 0.5))
                 } else {
-                    Some(Color::from_rgba(0.5, 0.5, 0.5, 0.9))
+                    Some(Color::from_rgba(0., 0., 0., 0.9))
                 },
                 background: Some(pane.border_color.into()),
                 ..Default::default()

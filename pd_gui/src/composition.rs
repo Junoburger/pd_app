@@ -13,11 +13,13 @@ pub struct Composition {
 }
 
 #[tokio::main]
-pub async fn get_compositions() -> Result<Vec<Composition>, Box<dyn std::error::Error>> {
-    let compositions: Vec<Composition> = reqwest::get("http://127.0.0.1:8000/compositions")
-        .await?
-        .json()
-        .await?;
+pub async fn get_compositions(
+) -> Result<Vec<Composition>, Box<dyn std::error::Error>> {
+    let compositions: Vec<Composition> =
+        reqwest::get("http://127.0.0.1:8000/compositions")
+            .await?
+            .json()
+            .await?;
 
     Ok(compositions)
 }

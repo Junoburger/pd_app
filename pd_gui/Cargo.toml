@@ -9,8 +9,11 @@ edition = "2021"
 
 [dependencies]
 epaint = "0.19.0"
-iced = {version = "0.4", features = ["pure"]}
+iced = {version = "0.4.2", features = ["pure", "glow", "canvas"]}
 iced_native = "0.5.1"
+iced_audio = "0.8"
+iced_aw = { version = "0.2.0",  features = ["icons"] }
+image = {version = "0.24.3", features = ["ico"] }
 
 # Dependencies for targeting web based sources 
 serde = { version = "1.0.144", features = ["derive"] }
@@ -20,3 +23,10 @@ tokio = { version = "1", features = ["full"] }
 # TODO: Create a separate audio_engine that handles audio streams and synthesis (as well as a midi_engine)
 cpal = "0.14.0"
 fundsp = "0.9.0"
+# symphonia = "0.5.1"
+
+#  TODO: Check if these can be removed
+anyhow = "1.0.12"
+hound = "3.4"
+ringbuf = "0.2"
+clap = { version = "3.1", default-features = false, features = ["std"] }
