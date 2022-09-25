@@ -30,3 +30,7 @@ anyhow = "1.0.12"
 hound = "3.4"
 ringbuf = "0.2"
 clap = { version = "3.1", default-features = false, features = ["std"] }
+
+
+
+# rainout = { git = "https://github.com/MeadowlarkDAW/rainout.git"}

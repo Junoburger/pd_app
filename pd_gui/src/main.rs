@@ -2,6 +2,8 @@ mod artist;
 pub mod audio;
 mod composition;
 mod synth;
+use std::any::Any;
+
 use artist::{get_artists, Artist};
 use audio::output_test_runner;
 use composition::Composition;
@@ -65,6 +67,7 @@ enum Message {
     VSliderDB(Normal),
     KnobFreq(Normal),
     XYPadFloat(Normal, Normal),
+    OpenCreateNewSamplePane(pane_grid::Axis, pane_grid::Pane),
 
     // AUDIO BACKEND
     OpenAudioDefaultChannel,
@@ -74,7 +77,8 @@ struct PsycheDaily {
     compositions: Vec<Composition>,
     artists: Vec<Artist>,
     is_composition_mode: bool,
-    create_composition_button: button::State,
+    start_new_composition: button::State,
+    open_new_sample_creator: button::State,
     panes: pane_grid::State<Pane>,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
@@ -109,6 +113,7 @@ struct PsycheDaily {
 
     // Open a audio I/O stream for a default channel
     open_audio_io: button::State,
+    has_sample_creator_open: bool,
 }
 
 impl iced::Application for PsycheDaily {
@@ -129,7 +134,8 @@ impl iced::Application for PsycheDaily {
                 compositions: vec![],
                 artists: vec![],
                 is_composition_mode: false,
-                create_composition_button: button::State::new(),
+                start_new_composition: button::State::new(),
+                open_new_sample_creator: button::State::new(),
                 panes,
                 panes_created: 1,
                 focus: None,
@@ -161,8 +167,9 @@ impl iced::Application for PsycheDaily {
                     tick_marks::Tier::Two,
                 ),
 
-                output_text: "Move a widget!".into(),
+                output_text: "Composition mode".into(),
                 open_audio_io: button::State::new(),
+                has_sample_creator_open: false,
             },
             Command::none(),
         )
@@ -253,6 +260,20 @@ impl iced::Application for PsycheDaily {
             // AUDIO UI
             // Retrieve the value by mapping the normalized value of the parameter
             // to the corresponding range.
+            Message::OpenCreateNewSamplePane(axis, pane) => {
+                let result = self.panes.split(
+                    axis,
+                    &pane,
+                    Pane::new(self.panes_created),
+                );
+
+                if let Some((pane, _)) = result {
+                    self.focus = Some(pane);
+                }
+
+                self.panes_created += 1;
+                self.has_sample_creator_open = true;
+            }
             //
             // Now do something useful with that value!
             Message::HSliderInt(normal) => {
@@ -323,59 +344,64 @@ impl iced::Application for PsycheDaily {
         //     XYPad::new(&mut self.xy_pad_state, Message::XYPadFloat);
 
         // //
-        let content: Element<_> = Column::new()
-            .max_width(300)
-            .max_height(500)
-            .spacing(20)
-            .padding(20)
-            .align_items(Alignment::Center)
-            // .push(h_slider_widget)
-            // .push(v_slider_widget)
-            // .push(knob_widget)
-            // .push(xy_pad_widget)
-            .push(
-                Container::new(Text::new(&self.output_text))
-                    .width(Length::Fill),
-            )
-            .into();
+        // let content: Element<_> = Column::new()
+        //     .max_width(300)
+        //     .max_height(500)
+        //     .spacing(20)
+        //     .padding(20)
+        //     .align_items(Alignment::Center)
+        //     .push(Space::new(Length::Units(0), Length::Units(10)))
+        //     .push(Text::new("Show composition swim lanes"))
+        // TODO: On press -> should open a new panel (for now -> might become a modal)
+        // .push(h_slider_widget)
+        // .push(v_slider_widget)
+        // .push(knob_widget)
+        // .push(xy_pad_widget)
+        // .push(
+        //     Container::new(Text::new(&self.output_text))
+        //         .width(Length::Fill),
+        // )
+        // .into();
 
         let focus = self.focus;
         let total_panes = self.panes.len();
 
         let pane_grid = PaneGrid::new(&mut self.panes, |id, pane| {
-            // let is_focused = focus == Some(id);
-
+            let is_focused = focus == Some(id);
+            let has_sample_creator_open = self.has_sample_creator_open;
             // let text = if pane.is_pinned { "Unpin" } else { "Pin" };
             // let pin_button =
             //     Button::new(&mut pane.pin_button, Text::new(text).size(14))
             //         .on_press(Message::TogglePin(id))
             //         .style(style::Button::Pin)
             //         .padding(3);
-            // let title = Row::with_children(vec![
-            //     // pin_button.into(),
-            //     // Text::new("Pane").into(), <<-- should probably showcontent title [e.g composition-name]
-            //     Text::new(pane.content.id.to_string())
-            //         .color(if is_focused {
-            //             PANE_ID_COLOR_FOCUSED
-            //         } else {
-            //             PANE_ID_COLOR_UNFOCUSED
-            //         })
-            //         .into(),
-            // ])
-            // .spacing(5)
 
-            // let title_bar = pane_grid::TitleBar::new(title)
-            //     .controls(pane.controls.view(id, total_panes, pane.is_pinned))
-            //     .padding(1)
-            //     .style(style::TitleBar { is_focused });
+            let title = Row::with_children(vec![
+                // pin_button.into(),
+                // Text::new("Pane").into(), <<-- should probably showcontent title [e.g composition-name]
+                Text::new(pane.content.id.to_string())
+                    .color(if is_focused {
+                        PANE_ID_COLOR_FOCUSED
+                    } else {
+                        PANE_ID_COLOR_UNFOCUSED
+                    })
+                    .into(),
+            ])
+            .spacing(5);
+
+            let title_bar = pane_grid::TitleBar::new(title)
+                .controls(pane.controls.view(id, total_panes, pane.is_pinned))
+                .padding(1)
+                .style(style::TitleBar { is_focused });
 
             pane_grid::Content::new(pane.content.view(
                 id,
                 total_panes,
                 pane.is_pinned,
+                has_sample_creator_open,
             ))
-            // .title_bar(title_bar) // <<-- // TODO: Title bar should probably be something like tabs with project-name
-            // .style(style::Pane { is_focused })
+            .title_bar(title_bar) // <<-- // TODO: Title bar should probably be something like tabs with project-name
+            .style(style::Pane { is_focused })
         })
         .width(Length::Fill)
         .height(Length::Fill)
@@ -392,30 +418,17 @@ impl iced::Application for PsycheDaily {
             // .push(Space::new(Length::Units(50), Length::Units(0)))
             .push(
                 Button::new(
-                    &mut self.create_composition_button,
-                    Text::new(format!(
-                        "Composition {}",
-                        icon_to_char(Icon::ClipboardPlus),
-                    ))
-                    .font(ICON_FONT),
+                    &mut self.start_new_composition,
+                    Text::new("Composition +"),
                 )
                 .on_press(Message::CreateCompositionPressed)
                 .style(style::Button::Primary),
-            )
-            .push(Space::new(Length::Units(0), Length::Units(10)))
-            .push(
-                Button::new(
-                    &mut self.open_audio_io,
-                    Text::new("Open audio channel"),
-                )
-                .on_press(Message::OpenAudioDefaultChannel)
-                .style(style::Button::Pin),
             );
 
         let mut column_2: Column<Message> = Column::new().height(Length::Fill);
         // .push(iced::widget::Space::with_height(Length::Fill))
         if self.is_composition_mode == true {
-            column_2 = column_2.push(content);
+            column_2 = column_2.push(pane_grid);
         }
 
         wrapper = wrapper.push(column_1).push(column_2);
@@ -467,6 +480,16 @@ struct Pane {
     pub controls: Controls,
 }
 
+impl Pane {
+    fn new(id: usize) -> Self {
+        Self {
+            is_pinned: false,
+            pin_button: button::State::new(),
+            content: Content::new(id),
+            controls: Controls::new(),
+        }
+    }
+}
 #[derive(Debug)]
 struct Content {
     id: usize,
@@ -479,17 +502,6 @@ struct Content {
 #[derive(Debug)]
 struct Controls {
     close: button::State,
-}
-
-impl Pane {
-    fn new(id: usize) -> Self {
-        Self {
-            is_pinned: false,
-            pin_button: button::State::new(),
-            content: Content::new(id),
-            controls: Controls::new(),
-        }
-    }
 }
 
 impl Content {
@@ -507,6 +519,7 @@ impl Content {
         pane: pane_grid::Pane,
         total_panes: usize,
         is_pinned: bool,
+        has_sample_creator_open: bool,
     ) -> Element<Message> {
         let Content {
             scroll,
@@ -515,6 +528,7 @@ impl Content {
             close,
             ..
         } = self;
+        // println!("{:?}", self.id == 0);
 
         let button = |state, label, message, style| {
             Button::new(
@@ -529,9 +543,6 @@ impl Content {
             .on_press(message)
             .style(style)
         };
-
-        // let slider =
-        //     iced_audio::Knob::new(&mut self.audio_knob, test(), test(), test());
 
         let mut controls = Column::new()
             .spacing(5)
@@ -550,13 +561,25 @@ impl Content {
             // ))
             ;
 
-        if total_panes > 1 && !is_pinned {
+        if self.id == 0 && !has_sample_creator_open {
             controls = controls.push(button(
-                close,
-                "Close",
-                Message::Close(pane),
-                style::Button::Destructive,
-            ));
+                split_horizontally,
+                "Create new sample",
+                Message::OpenCreateNewSamplePane(
+                    pane_grid::Axis::Horizontal,
+                    pane,
+                ),
+                style::Button::Primary,
+            ))
+        }
+
+        if total_panes > 1 && !is_pinned {
+            // controls = controls.push(button(
+            //     close,
+            //     "Close",
+            //     Message::Close(pane),
+            //     style::Button::Destructive,
+            // ));
         }
 
         let content = Scrollable::new(scroll)

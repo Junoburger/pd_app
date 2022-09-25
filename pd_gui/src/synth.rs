@@ -97,7 +97,7 @@ where
     let mut c = c
         >> (declick() | declick())
         >> (dcblock() | dcblock())
-        //>> (multipass() & 0.2 * reverb_stereo(10.0, 3.0))
+        >> (multipass() & 0.2 * reverb_stereo(10.0, 3.0))
         >> limiter_stereo((1.0, 5.0));
     //let mut c = c * 0.1;
     c.reset(Some(sample_rate));
@@ -115,7 +115,7 @@ where
     )?;
     stream.play()?;
 
-    std::thread::sleep(std::time::Duration::from_millis(50000));
+    std::thread::park();
 
     Ok(())
 }

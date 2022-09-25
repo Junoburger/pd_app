@@ -7,19 +7,19 @@ use ringbuf::RingBuffer;
 use fundsp::hacker::*;
 
 #[derive(Debug)]
-pub struct Opt {
+pub struct AudioData {
     latency: f32,
     input_device: String,
     output_device: String,
 }
 
-impl Opt {
+impl AudioData {
     fn from_args() -> Result<Self, Error> {
         // TODO: Check if clap if necessary on init AND figure out optimal latency
         // !OR
         //! always set default and create a switcher that iterates through available I/O
 
-        return Ok(Opt {
+        return Ok(AudioData {
             latency: 100.0,
             input_device: "default".to_string(),
             output_device: "default".to_string(),
@@ -28,7 +28,7 @@ impl Opt {
 }
 
 pub fn output_test_runner() {
-    let opt = Opt::from_args().unwrap();
+    let opt = AudioData::from_args().unwrap();
 
     let host = cpal::default_host();
     let input_device = host
@@ -43,6 +43,7 @@ pub fn output_test_runner() {
     let config: cpal::StreamConfig =
         input_device.default_input_config().unwrap().into();
     println!("{:#?}", config.sample_rate);
+
     // Create a delay in case the input and output devices aren't synced.
     let latency_frames = (opt.latency / 1_000.0) * config.sample_rate.0 as f32;
     let latency_samples = latency_frames as usize * config.channels as usize;
