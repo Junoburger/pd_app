@@ -1,10 +1,15 @@
-use std::io::Error;
+use std::{
+    io::Error,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use fundsp::prelude::AudioNode;
-use ringbuf::RingBuffer;
 
-use fundsp::hacker::*;
+use parking::Parker;
+use ringbuf::RingBuffer;
 
 #[derive(Debug)]
 pub struct AudioData {
@@ -19,15 +24,22 @@ impl AudioData {
         // !OR
         //! always set default and create a switcher that iterates through available I/O
 
-        return Ok(AudioData {
+        Ok(AudioData {
             latency: 100.0,
             input_device: "default".to_string(),
             output_device: "default".to_string(),
-        });
+        })
     }
 }
 
-pub fn output_test_runner() {
+pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
+    // parker: Parker,
+    // state: Arc<AtomicBool>,
+) {
+    // let (sender, receiver) = std::sync::mpsc::channel();
+    // let parker = Parker::new();
+    // sender.send(state).unwrap();
+
     let opt = AudioData::from_args().unwrap();
 
     let host = cpal::default_host();
@@ -105,15 +117,20 @@ pub fn output_test_runner() {
         "Starting the input and output streams with `{}` milliseconds of latency.",
         opt.latency
     );
+    // let keep_channel_open_msg_from_main_thread = receiver.recv().unwrap();
+
     input_stream.play().unwrap();
     output_stream.play().unwrap();
 
-    // Run for 3 seconds before closing.
-    println!("Playing for 5 seconds... ");
-    std::thread::sleep(std::time::Duration::from_secs(10));
-    drop(input_stream);
-    drop(output_stream);
-    println!("Done!");
+    // TODO: let thread run until val is false
+    std::mem::forget(input_stream);
+    std::mem::forget(output_stream);
+
+    // std::mem::drop(input_stream);
+    // std::mem::drop(output_stream);
+    println!("End of thread!");
+
+    // audio_thread.join().unwrap();
 }
 
 pub fn err_fn(err: cpal::StreamError) {

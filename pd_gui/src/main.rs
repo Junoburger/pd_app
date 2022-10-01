@@ -2,7 +2,14 @@ mod artist;
 pub mod audio;
 mod composition;
 mod synth;
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Condvar, Mutex,
+    },
+    thread,
+};
 
 use artist::{get_artists, Artist};
 use audio::output_test_runner;
@@ -10,10 +17,13 @@ use composition::Composition;
 // use synth::synth;
 mod ui;
 
+use cpal::traits::StreamTrait;
 use iced::{
-    button, keyboard, pane_grid, window, Application, Button, Color, Column,
-    Command, Container, Element, Length, PaneGrid, Row, Settings, Space,
-    Subscription, Text,
+    button, keyboard,
+    pane_grid::{self, Split},
+    window::{self, Icon},
+    Application, Button, Color, Column, Command, Container, Element, Length,
+    PaneGrid, Row, Settings, Space, Subscription, Text,
 };
 use iced_audio::Normal;
 use iced_aw::graphics::icons::icon_to_char;
@@ -22,14 +32,12 @@ use iced_native::{event, subscription, Event};
 
 use ui::{
     colors::{PANE_ID_COLOR_FOCUSED, PANE_ID_COLOR_UNFOCUSED},
-    components::audio_mixer::channel_fader::ChannelFader,
-    components::panes::{style, Pane},
+    components::{
+        audio_mixer::level_meter,
+        panes::{style, Pane},
+    },
 };
 
-// Test drawing a audio i/o meter with level control -- START
-//
-
-// Test drawing a audio i/o meter with level control -- END
 static ICON: &[u8] = include_bytes!("../resources/sqr.png");
 const ICON_HEIGHT: u32 = 250;
 const ICON_WIDTH: u32 = 250;
@@ -45,7 +53,7 @@ fn main() -> iced::Result {
     let settings = Settings {
         window: window::Settings {
             // icon: Some(icon.unwrap()),
-            min_size: Some((400, 200)),
+            min_size: Some((600, 400)),
             transparent: true,
             ..window::Settings::default()
         },
@@ -56,21 +64,22 @@ fn main() -> iced::Result {
 }
 
 struct PsycheDaily {
-    is_composition_mode: bool,
-    start_new_composition: button::State,
     panes: pane_grid::State<Pane>,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
     // Open a audio I/O stream for a default channel
-    open_audio_io: button::State,
+    start_new_composition: button::State,
+
     has_sample_creator_open: bool,
+    is_composition_mode: bool,
     toggle_sidepanel: button::State,
     pane_names: HashMap<String, pane_grid::Pane>,
+    switch_on: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
-enum Message {
-    CreateCompositionPressed,
+pub enum Message {
+    // Pane Grid related
     Split(pane_grid::Axis, pane_grid::Pane),
     SplitFocused(pane_grid::Axis),
     FocusAdjacent(pane_grid::Direction),
@@ -80,12 +89,17 @@ enum Message {
     TogglePin(pane_grid::Pane),
     Close(pane_grid::Pane),
     CloseFocused,
+
+    ////
+    CreateCompositionPressed,
     OpenCreateNewSamplePane(pane_grid::Axis, pane_grid::Pane),
     // AUDIO BACKEND
     OpenAudioDefaultChannel,
 
     // ------
     TestToggle,
+    DB(Normal),
+    ////
 }
 
 impl iced::Application for PsycheDaily {
@@ -100,21 +114,17 @@ impl iced::Application for PsycheDaily {
                 is_composition_mode: false,
                 start_new_composition: button::State::new(),
                 panes,
-                panes_created: 1,
+                panes_created: 1, // FIXME should be 0 on init
                 focus: None,
-                open_audio_io: button::State::new(),
                 has_sample_creator_open: false,
                 toggle_sidepanel: button::State::new(),
                 pane_names: HashMap::new(),
-                // AUDIO MIXER UI
+                switch_on: false,
             },
             Command::none(),
         )
     }
 
-    fn background_color(&self) -> iced::Color {
-        Color::from_rgba(0.9, 0.9, 0.9, 0.9)
-    }
     fn title(&self) -> String {
         String::from("Psyche Daily")
     }
@@ -201,8 +211,6 @@ impl iced::Application for PsycheDaily {
                 }
             }
             // AUDIO UI
-            // Retrieve the value by mapping the normalized value of the parameter
-            // to the corresponding range.
             Message::OpenCreateNewSamplePane(axis, pane) => {
                 let result = self.panes.split(
                     axis,
@@ -217,13 +225,44 @@ impl iced::Application for PsycheDaily {
                 self.panes_created += 1; // TODO: keep track of named panes in a vector/hashmap
                 self.has_sample_creator_open = !self.has_sample_creator_open;
             }
-
+            // AUDIO BE
             Message::OpenAudioDefaultChannel => {
-                output_test_runner();
+                // let (tx, rx) = mpsc::channel();
+                self.switch_on = !self.switch_on;
+                // let x = Arc::new(AtomicBool::new(self.switch_on));
+                println!("BOOL {}", self.switch_on);
+
+                let pair = Arc::new((Mutex::new(false), Condvar::new()));
+                let pair2 = pair.clone();
+
+                // let (tx, rx) = mpsc::channel();
+
+                if self.switch_on {
+                    thread::spawn(move || {
+                        output_test_runner();
+                        // match rx.try_recv() {
+                        //     Ok(_) | Err(mpsc::TryRecvError::Disconnected) => {
+                        //         println!("Terminating.");
+                        //     }
+                        //     Err(mpsc::TryRecvError::Empty) => {}
+                        // }
+                    })
+                    .join()
+                    .unwrap()
+                };
+
+                // let _ = tx.send(());
+
                 // synth();
             }
             Message::TestToggle => {
                 println!("Toggle");
+            }
+            Message::DB(normal) => {
+                //  self.output_text =
+                // info_text_db("VSliderDB", self.db_range.unmap_to_value(normal));
+
+                // TODO: Update output text in sample_creator pane
             }
         }
 
@@ -231,6 +270,12 @@ impl iced::Application for PsycheDaily {
     }
 
     fn view(&mut self) -> Element<Message> {
+        //         column![
+        //     text("Bezier tool example").width(Length::Shrink).size(50),
+        //     self.bezier.view(&self.curves).map(Message::AddCurve),
+        //     button("Clear").padding(8).on_press(Message::Clear),
+        // ]
+
         // TODO: On press -> should open a new panel (for now -> might become a modal)
         //     .push(Text::new("Show composition swim lanes"))
         let focus = self.focus;
@@ -246,15 +291,9 @@ impl iced::Application for PsycheDaily {
                 pane_name = "Sample creator".to_string();
             }
 
-            // let text = if pane.is_pinned { "Unpin" } else { "Pin" };
-            // let pin_button =
-            //     Button::new(&mut pane.pin_button, Text::new(text).size(14))
-            //         .on_press(Message::TogglePin(id))
-            //         .style(style::Button::Pin)
-            //         .padding(3);
+            // let x = pane_grid::Node::splits(pane_grid).map(|split| split);
 
             let title = Row::with_children(vec![
-                // pin_button.into(),
                 // Text::new("Pane").into(), <<-- should probably showcontent title [e.g composition-name]
                 Text::new(&pane_name)
                     .color(if is_focused {
@@ -306,6 +345,7 @@ impl iced::Application for PsycheDaily {
                 .style(style::Button::Primary),
             )
         }
+
         // Show sidebar with composition relatd options when in composition mode
         if self.is_composition_mode {
             column_1 = column_1.push(
@@ -381,3 +421,7 @@ fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
         _ => direction.map(Message::FocusAdjacent),
     }
 }
+
+pub fn toggle_audio_io_switch(switch_on: bool) {}
+
+// -----------------------

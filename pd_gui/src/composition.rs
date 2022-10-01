@@ -3,13 +3,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::artist::Artist;
 
+type Sample = i32; // A sample is audio from the local-fs or ipfs (the latter with a potential pointer to a blockchain node) // TODO: Create the correct type
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Composition {
     pub id: i64,
     pub artist: String,
     pub title: String,
     pub desc: String,
-    pub samples: Vec<i64>,
+    pub samples: Vec<Sample>,
     pub collaborators: Vec<Artist>,
 }
 
@@ -40,6 +42,6 @@ impl Composition {
     }
 
     pub fn container<Msg>() -> Column<'static, Msg> {
-        Column::new().spacing(20)
+        Column::new()
     }
 }
