@@ -11,9 +11,9 @@ use composition::Composition;
 mod ui;
 
 use iced::{
-    button, keyboard, pane_grid, window, Application, Button, Column, Command,
-    Container, Element, Length, PaneGrid, Row, Settings, Space, Subscription,
-    Text,
+    button, keyboard, pane_grid, window, Application, Button, Color, Column,
+    Command, Container, Element, Length, PaneGrid, Row, Settings, Space,
+    Subscription, Text,
 };
 use iced_audio::Normal;
 use iced_aw::graphics::icons::icon_to_char;
@@ -46,6 +46,7 @@ fn main() -> iced::Result {
         window: window::Settings {
             // icon: Some(icon.unwrap()),
             min_size: Some((400, 200)),
+            transparent: true,
             ..window::Settings::default()
         },
         ..Settings::default()
@@ -55,20 +56,16 @@ fn main() -> iced::Result {
 }
 
 struct PsycheDaily {
-    compositions: Vec<Composition>,
-    artists: Vec<Artist>,
     is_composition_mode: bool,
     start_new_composition: button::State,
     panes: pane_grid::State<Pane>,
     panes_created: usize,
     focus: Option<pane_grid::Pane>,
-    output_text: String,
     // Open a audio I/O stream for a default channel
     open_audio_io: button::State,
     has_sample_creator_open: bool,
     toggle_sidepanel: button::State,
     pane_names: HashMap<String, pane_grid::Pane>,
-    channel_fader: ChannelFader,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -83,10 +80,6 @@ enum Message {
     TogglePin(pane_grid::Pane),
     Close(pane_grid::Pane),
     CloseFocused,
-    HSliderInt(Normal),
-    VSliderDB(Normal),
-    KnobFreq(Normal),
-    XYPadFloat(Normal, Normal),
     OpenCreateNewSamplePane(pane_grid::Axis, pane_grid::Pane),
     // AUDIO BACKEND
     OpenAudioDefaultChannel,
@@ -104,25 +97,24 @@ impl iced::Application for PsycheDaily {
         let (panes, _) = pane_grid::State::new(Pane::new(0));
         (
             Self {
-                compositions: vec![],
-                artists: vec![],
                 is_composition_mode: false,
                 start_new_composition: button::State::new(),
                 panes,
                 panes_created: 1,
                 focus: None,
-                output_text: "Composition mode".into(),
                 open_audio_io: button::State::new(),
                 has_sample_creator_open: false,
                 toggle_sidepanel: button::State::new(),
                 pane_names: HashMap::new(),
                 // AUDIO MIXER UI
-                channel_fader: ChannelFader::new(),
             },
             Command::none(),
         )
     }
 
+    fn background_color(&self) -> iced::Color {
+        Color::from_rgba(0.9, 0.9, 0.9, 0.9)
+    }
     fn title(&self) -> String {
         String::from("Psyche Daily")
     }
@@ -225,31 +217,7 @@ impl iced::Application for PsycheDaily {
                 self.panes_created += 1; // TODO: keep track of named panes in a vector/hashmap
                 self.has_sample_creator_open = !self.has_sample_creator_open;
             }
-            //
-            // Now do something useful with that value!
-            Message::HSliderInt(normal) => {
-                // Integer parameters must be snapped to make the widget "step" when moved.
 
-                //     .h_slider_state
-                //     .snap_visible_to(&self.int_range);
-
-                // let value = self.int_range.unmap_to_value(normal);
-                // self.output_text = format!("HSliderInt: {}", value);
-            }
-            Message::VSliderDB(normal) => {
-                let value = self.channel_fader.db_range.unmap_to_value(normal);
-                self.output_text = format!("VSliderDB: {:.3}", value);
-            }
-            Message::KnobFreq(normal) => {
-                // let value = self.freq_range.unmap_to_value(normal);
-                // self.output_text = format!("KnobFreq: {:.2}", value);
-            }
-            Message::XYPadFloat(normal_x, normal_y) => {
-                // let value_x = self.float_range.unmap_to_value(normal_x);
-                // let value_y = self.float_range.unmap_to_value(normal_y);
-                // self.output_text =
-                //     format!("XYPadFloat: x: {:.2}, y: {:.2}", value_x, value_y);
-            }
             Message::OpenAudioDefaultChannel => {
                 output_test_runner();
                 // synth();
@@ -263,17 +231,8 @@ impl iced::Application for PsycheDaily {
     }
 
     fn view(&mut self) -> Element<Message> {
-        // let content: Element<_> = Column::new()
-        //     .max_width(300)
-        //     .max_height(500)
-        //     .spacing(20)
-        //     .padding(20)
-        //     .align_items(iced::Alignment::Center)
-        //     .push(Space::new(Length::Units(0), Length::Units(10)))
+        // TODO: On press -> should open a new panel (for now -> might become a modal)
         //     .push(Text::new("Show composition swim lanes"))
-        //     // TODO: On press -> should open a new panel (for now -> might become a modal)
-        //     .into();
-
         let focus = self.focus;
         let total_panes = self.panes.len();
 
@@ -336,6 +295,7 @@ impl iced::Application for PsycheDaily {
         let mut column_1: Column<Message> = Column::new().height(Length::Fill);
         // .push(Space::new(Length::Units(50), Length::Units(0)));
 
+        // Show option to creation a new composition when not already in composition mode
         if !self.is_composition_mode {
             column_1 = column_1.push(
                 Button::new(
@@ -346,7 +306,7 @@ impl iced::Application for PsycheDaily {
                 .style(style::Button::Primary),
             )
         }
-
+        // Show sidebar with composition relatd options when in composition mode
         if self.is_composition_mode {
             column_1 = column_1.push(
                 Button::new(
@@ -361,7 +321,8 @@ impl iced::Application for PsycheDaily {
         }
 
         let mut column_2: Column<Message> = Column::new().height(Length::Fill);
-        // .push(iced::widget::Space::with_height(Length::Fill))
+
+        // Show composition panes
         if self.is_composition_mode == true {
             column_2 = column_2.push(pane_grid);
         }
@@ -391,6 +352,15 @@ impl iced::Application for PsycheDaily {
         })
     }
 }
+
+// -------------------
+// -------------------
+// -------------------
+// -------------------
+// -------------------
+// -------------------
+// -------------------
+// TODO Figure out where handle_hotkey belongs
 
 fn handle_hotkey(key_code: keyboard::KeyCode) -> Option<Message> {
     use keyboard::KeyCode;

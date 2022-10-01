@@ -1,4 +1,5 @@
 use crate::Message as PsycheDailyMessage;
+
 use iced::{
     alignment, button, pane_grid, scrollable, Button, Color, Column, Container,
     Element, Length, Scrollable, Text,
@@ -7,8 +8,6 @@ use iced_audio::{
     h_slider, knob, tick_marks, v_slider, xy_pad, FloatRange, FreqRange,
     IntRange, LogDBRange, Normal, VSlider,
 };
-
-use super::audio_mixer::channel_fader::ChannelFader;
 
 #[derive(Debug)]
 pub struct Pane {
@@ -29,6 +28,8 @@ impl Pane {
     }
 }
 
+// enum PanesGridMessage {}
+
 #[derive(Debug)]
 pub struct Content {
     pub id: usize,
@@ -47,7 +48,6 @@ pub struct Content {
     pub knob_state: knob::State,
     pub xy_pad_state: xy_pad::State,
     pub center_tick_mark: tick_marks::Group,
-    pub channel_fader: ChannelFader,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -93,7 +93,6 @@ impl Content {
 
             // Add a tick mark at the center position with the tier 2 size
             center_tick_mark: tick_marks::Group::center(tick_marks::Tier::Two),
-            channel_fader: ChannelFader::new(),
         }
     }
     pub fn view(
@@ -119,13 +118,6 @@ impl Content {
         //     HSlider::new(&mut self.h_slider_state, Message::HSliderInt)
         //         // Add the tick mark group to this widget.
         //         .tick_marks(&self.center_tick_mark);
-
-        let v_slider_widget = VSlider::new(
-            &mut self.channel_fader.v_slider_state,
-            PsycheDailyMessage::VSliderDB,
-        )
-        .tick_marks(&self.channel_fader.center_tick_mark)
-        .height(Length::Units(150));
 
         // let knob_widget = Knob::new(
         //     &mut self.knob_state,
@@ -196,8 +188,9 @@ impl Content {
             ))
         }
 
+        // pane with ID 1 is sample creator // TODO: find a better denomination to identify panes
         if self.id == 1 {
-            content = content.push(v_slider_widget)
+            // content = content.push(v_slider_widget)
         }
 
         Container::new(content)
