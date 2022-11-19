@@ -1,21 +1,13 @@
-use std::{
-    io::Error,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-};
+use ringbuf::SharedRb;
+use std::io::Error;
 
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-
-use parking::Parker;
-use ringbuf::RingBuffer;
+use cpal::traits::{DeviceTrait, HostTrait};
 
 #[derive(Debug)]
 pub struct AudioData {
     latency: f32,
-    input_device: String,
-    output_device: String,
+    // input_device: String,
+    // output_device: String,
 }
 
 impl AudioData {
@@ -26,27 +18,25 @@ impl AudioData {
 
         Ok(AudioData {
             latency: 100.0,
-            input_device: "default".to_string(),
-            output_device: "default".to_string(),
+            // input_device: "default".to_string(),
+            // output_device: "default".to_string(),
         })
     }
 }
 
-pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
-    // parker: Parker,
-    // state: Arc<AtomicBool>,
-) {
-    // let (sender, receiver) = std::sync::mpsc::channel();
-    // let parker = Parker::new();
-    // sender.send(state).unwrap();
-
+pub fn open_audio_io(state: bool) {
+    // CREATE AUDIO CTX
     let opt = AudioData::from_args().unwrap();
 
+    // CREATE HOST
     let host = cpal::default_host();
+
+    // CREATE INPUT DEVICE FROM HOST
     let input_device = host
         .default_input_device()
         .expect("failed to find input device");
 
+    // CREATE OUTPUT DEVICE FROM HOST
     let output_device = host
         .default_output_device()
         .expect("failed to find output device");
@@ -61,7 +51,7 @@ pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
     let latency_samples = latency_frames as usize * config.channels as usize;
 
     // The buffer to share samples
-    let ring = RingBuffer::new(latency_samples * 2);
+    let ring = SharedRb::new(latency_samples * 2);
     let (mut producer, mut consumer) = ring.split();
 
     // Fill the samples with 0.0 equal to the length of the delay.
@@ -71,6 +61,7 @@ pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
         producer.push(0.0).unwrap();
     }
 
+    // INPUT DATA CALLBACK
     let input_data_fn = move |data: &[f32], _: &cpal::InputCallbackInfo| {
         let mut output_fell_behind = false;
         for &sample in data {
@@ -83,6 +74,7 @@ pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
         }
     };
 
+    // OUTPUT DATA CALLBACK
     let output_data_fn =
         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
             let mut input_fell_behind = false;
@@ -102,7 +94,6 @@ pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
         };
 
     // Build streams.
-
     let input_stream = input_device
         .build_input_stream(&config, input_data_fn, err_fn)
         .unwrap();
@@ -110,27 +101,25 @@ pub fn output_test_runner(// receiver: std::sync::mpsc::Receiver<bool>,
     let output_stream = output_device
         .build_output_stream(&config, output_data_fn, err_fn)
         .unwrap();
+
     println!("Successfully built streams.");
 
     // Play the streams.
-    println!(
-        "Starting the input and output streams with `{}` milliseconds of latency.",
-        opt.latency
-    );
+    // println!(
+    //     "Starting the input and output streams with `{}` milliseconds of latency.",
+    //     opt.latency
+    // );
     // let keep_channel_open_msg_from_main_thread = receiver.recv().unwrap();
 
-    input_stream.play().unwrap();
-    output_stream.play().unwrap();
+    // while state {
+    println!("{:?}", state);
+    // }
 
-    // TODO: let thread run until val is false
-    std::mem::forget(input_stream);
-    std::mem::forget(output_stream);
+    // input_stream.play().unwrap();
+    // output_stream.play().unwrap();
+    // }
 
-    // std::mem::drop(input_stream);
-    // std::mem::drop(output_stream);
     println!("End of thread!");
-
-    // audio_thread.join().unwrap();
 }
 
 pub fn err_fn(err: cpal::StreamError) {

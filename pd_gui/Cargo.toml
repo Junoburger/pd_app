@@ -15,7 +15,7 @@ iced_audio = "0.8"
 iced_graphics = "0.3.1"
 iced_lazy = "0.1.1"
 iced_aw = { version = "0.2.0",  features = ["icons"] }
-iced_wgpu = "0.5.1"
+# iced_wgpu = "0.5.1"
 image = {version = "0.24.3", features = ["ico"] }
 parking = "2.0.0"
 
@@ -32,7 +32,7 @@ fundsp = "0.9.0"
 #  TODO: Check if these can be removed
 anyhow = "1.0.12"
 hound = "3.4"
-ringbuf = "0.2"
+ringbuf = "0.3.1"
 clap = { version = "4.0.6", default-features = false, features = ["std"] }
 
 

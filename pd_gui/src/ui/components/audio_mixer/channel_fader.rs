@@ -1,7 +1,5 @@
 use iced_audio::{text_marks, tick_marks, v_slider, LogDBRange};
 
-use crate::Message as PsycheDailyMessage;
-
 #[derive(Debug)]
 pub struct ChannelFader {
     pub db_range: LogDBRange,

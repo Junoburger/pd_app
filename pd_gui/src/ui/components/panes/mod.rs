@@ -1,6 +1,6 @@
-use crate::Message as PsycheDailyMessage;
-
 use iced::{button, pane_grid, Button, Element, Text};
+
+use crate::app::Message;
 
 #[derive(Debug)]
 pub struct Pane {
@@ -25,12 +25,11 @@ impl Pane {
 pub mod content {
     use iced_aw::graphics::icons::icon_to_char;
 
-    use crate::{
+    use crate::app::{
         ui::components::audio_mixer::{
-            level_meter::{self},
-            test_canvas,
+            channel_fader::ChannelFader, test_canvas,
         },
-        Message as PsycheDailyMessage,
+        Message,
     };
 
     #[derive(Debug)]
@@ -42,8 +41,7 @@ pub mod content {
         pub close: iced::button::State,
         pub pane_name: String,
         // TODO audio_bus: -> Shows the audio output signal in decibels,
-        pub channel_fader:
-            crate::ui::components::audio_mixer::channel_fader::ChannelFader,
+        pub channel_fader: ChannelFader,
         open_audio_io: iced::button::State,
     }
 
@@ -57,7 +55,7 @@ pub mod content {
                 close: iced::button::State::new(),
                 pane_name: "Composition".to_string(),
                 // AUDIO UI
-                channel_fader: crate::ui::components::audio_mixer::channel_fader::ChannelFader::new(),
+                channel_fader: ChannelFader::new(),
                 open_audio_io: iced::button::State::new(),
             }
         }
@@ -68,7 +66,7 @@ pub mod content {
             is_pinned: bool,
             has_sample_creator_open: bool,
             pane_name: String,
-        ) -> iced::Element<PsycheDailyMessage> {
+        ) -> iced::Element<Message> {
             let Content {
                 scroll,
                 split_horizontally,
@@ -103,7 +101,7 @@ pub mod content {
                 content = content.push(button(
                     split_horizontally,
                     "Create new sample",
-                    PsycheDailyMessage::OpenCreateNewSamplePane(
+                    Message::OpenCreateNewSamplePane(
                         iced::pane_grid::Axis::Horizontal,
                         pane,
                     ),
@@ -114,7 +112,7 @@ pub mod content {
             // pane with ID 1 is sample creator // TODO: find a better denomination to identify panes
             if self.id == 1 {
                 //
-                let crate::ui::components::audio_mixer::channel_fader::ChannelFader {
+                let ChannelFader {
                     db_tick_marks,
                     db_text_marks,
                     channel_fader_db_state,
@@ -124,7 +122,7 @@ pub mod content {
 
                 let v_slider_db = iced_audio::VSlider::new(
                     channel_fader_db_state,
-                    PsycheDailyMessage::DB,
+                    Message::DB,
                 )
                 .tick_marks(db_tick_marks)
                 .text_marks(db_text_marks);
@@ -149,8 +147,7 @@ pub mod content {
                             .height(iced::Length::Fill)
                             // .push(level_meter::level_meter(10., 200.))
                             .push(level_meter_test_l)
-                            .spacing(10)
-                            // .push(level_meter::level_meter(10., 200.)),
+                            .spacing(10) // .push(level_meter::level_meter(10., 200.)),
                             .push(level_meter_test_r),
                     );
 
@@ -167,7 +164,7 @@ pub mod content {
                     iced::Text::new(icon_to_char(iced_aw::Icon::RecordCircle))
                         .font(iced_aw::ICON_FONT),
                 )
-                .on_press(PsycheDailyMessage::OpenAudioDefaultChannel);
+                .on_press(Message::OpenAudioDefaultChannel);
 
                 content = content.push(open_audio_btn);
             }
@@ -198,21 +195,24 @@ impl Controls {
         pane: pane_grid::Pane,
         total_panes: usize,
         is_pinned: bool,
-    ) -> Element<PsycheDailyMessage> {
+    ) -> Element<Message> {
         let mut button =
             Button::new(&mut self.close, Text::new("Close").size(14))
                 .style(style::Button::Control)
                 .padding(3);
         if total_panes > 1 && !is_pinned {
-            button = button.on_press(PsycheDailyMessage::Close(pane));
+            button = button.on_press(Message::Close(pane));
         }
         button.into()
     }
 }
 
 pub mod style {
-    use crate::ui::colors::{ACTIVE, HOVERED, PANE_ID_COLOR_FOCUSED, SURFACE};
     use iced::{button, container, Background, Color, Vector};
+
+    use crate::app::ui::colors::{
+        ACTIVE, HOVERED, PANE_ID_COLOR_FOCUSED, SURFACE,
+    };
 
     pub struct PsycheDaily;
 

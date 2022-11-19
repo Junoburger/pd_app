@@ -1,5 +1,6 @@
-use crate::composition::Composition;
 use serde::{Deserialize, Serialize};
+
+use super::composition::Composition;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Artist {

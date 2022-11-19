@@ -1,7 +1,7 @@
 use iced::Column;
 use serde::{Deserialize, Serialize};
 
-use crate::artist::Artist;
+use super::artist::Artist;
 
 type Sample = i32; // A sample is audio from the local-fs or ipfs (the latter with a potential pointer to a blockchain node) // TODO: Create the correct type
 
